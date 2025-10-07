@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>七龍珠超：力之大會 - 神之對決版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        :root {
+            --player-color: #3b82f6; --opponent-color: #ef4444; --power-color: #facc15;
+            --stamina-color: #22c55e; --transform-color: #a855f7; --clash-color: #f97316;
+        }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(145deg, #020024 0%, #0d1117 50%, #24292e 100%);
+            color: #e6edf3; display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; padding: 1rem; overflow: hidden; position: relative;
+        }
+        .vfx-layer, .clash-modal, .intro-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 50; }
+        .game-container {
+            width: 100%; max-width: 900px; background-color: rgba(22, 27, 34, 0.8);
+            backdrop-filter: blur(10px); border: 2px solid #30363d; border-radius: 16px;
+            padding: 2rem; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            text-align: center; position: relative; z-index: 1;
+        }
+        h1 {
+            font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 900; color: var(--player-color);
+            text-shadow: 0 0 10px var(--player-color), 0 0 20px var(--player-color); margin-bottom: 1.5rem;
+        }
+        .character-card {
+            background-color: #21262d; border: 2px solid transparent; border-radius: 12px;
+            padding: 1rem; transition: all 0.3s ease; cursor: pointer; text-align: center;
+            flex: 1; display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .character-card:hover { transform: translateY(-10px); box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        .character-card.selected { border-color: var(--power-color); box-shadow: 0 0 20px var(--power-color); }
+        .character-image-container {
+            width: 100px; height: 100px; margin: 0 auto 1rem; border-radius: 50%;
+            background: radial-gradient(circle, #30363d 0%, #161b22 70%); overflow: hidden;
+            border: 3px solid #555; position: relative;
+        }
+        .character-image { width: 100%; height: 100%; object-fit: cover; object-position: center; transition: transform 0.3s ease; }
+        .character-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .game-area { display: none; }
+        .game-area.active { display: flex; flex-direction: column; gap: 1rem; }
+        
+        #battlefield {
+            width: 100%;
+            height: 250px;
+            border-bottom: 3px solid rgba(88, 166, 255, 0.5);
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            padding: 0 1rem;
+            position: relative;
+        }
+        .team-bench { display: flex; flex-direction: column; gap: 0.5rem; position: absolute; bottom: 10px; }
+        .team-bench.player { left: 10px; }
+        .team-bench.opponent { right: 10px; }
+        .bench-char { display: flex; align-items: center; gap: 0.5rem; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 8px; }
+        .bench-char img { width: 40px; height: 40px; border-radius: 50%; }
+        .bench-char-health { width: 50px; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
+        .bench-char-health-fill { height: 100%; background: var(--stamina-color); transition: width 0.3s; }
+        
+        .character-battle-container {
+            display: flex; flex-direction: column; align-items: center; width: 30%;
+        }
+        .fighter-stats { width: 100%; margin-bottom: 0.5rem; }
+        .character-sprite { height: 200px; display: flex; align-items: flex-end; justify-content: center; position: relative; }
+        .character-sprite img { max-height: 180px; transition: transform 0.2s ease-out; }
+        .charging-aura { position: absolute; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, rgba(250, 204, 21, 0) 40%, rgba(250, 204, 21, 0.5) 70%); animation: pulse-aura 1s infinite; bottom: 0; z-index: -1; }
+        @keyframes pulse-aura { 0%, 100% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.1); opacity: 1; } }
+
+        .stat-bar { width: 100%; height: 15px; background-color: #30363d; border-radius: 15px; overflow: hidden; border: 1px solid #555; position: relative; margin-top: 4px; }
+        .stat-fill { height: 100%; transition: width 0.4s ease-in-out; border-radius: 15px; }
+        #player-health-bar .stat-fill { background: linear-gradient(90deg, #10b981, #22c55e); }
+        #opponent-health-bar .stat-fill { background: linear-gradient(90deg, #f87171, #ef4444); }
+        #player-stamina-bar .stat-fill { background: linear-gradient(90deg, #38bdf8, #0ea5e9); }
+        
+        .control-button {
+            padding: 0.8rem 1.5rem; font-size: 1rem; font-weight: 700; color: #e6edf3;
+            background-color: rgba(48, 54, 61, 0.7); border: 2px solid #58a6ff; border-radius: 8px;
+            cursor: pointer; transition: all 0.2s; text-shadow: 0 0 5px black;
+        }
+        #switch-btn { border-color: #9333ea; color: #9333ea; }
+        #switch-btn:hover:not(:disabled) { background-color: #9333ea; color: white; box-shadow: 0 0 15px #9333ea; }
+        
+        .message-box { background-color: rgba(13, 17, 23, 0.7); border: 1px solid #30363d; border-radius: 8px; padding: 1rem; font-style: italic; min-height: 50px; display: flex; align-items: center; justify-content: center; margin-top: 1rem; }
+        .power-bar { width: 100%; height: 20px; background-color: #30363d; border-radius: 20px; overflow: hidden; border: 1px solid #555; }
+        .power-fill { height: 100%; background: linear-gradient(90deg, #fde047, var(--power-color)); transition: width 0.1s linear; }
+        .fighter-stats .name { transition: color 0.5s ease; }
+        .transformed { color: var(--transform-color) !important; text-shadow: 0 0 10px var(--transform-color); }
+        
+        @keyframes attack-lunge-player { 50% { transform: translateX(100px) scale(1.1); } }
+        @keyframes attack-lunge-opponent { 50% { transform: translateX(-100px) scale(1.1); } }
+        @keyframes hit-recoil { 50% { transform: translateX(var(--recoil-dir, 20px)) scale(0.9) rotate(var(--recoil-rot, 5deg)); } }
+        @keyframes transform-flash { 0% { box-shadow: 0 0 0px rgba(168, 85, 247, 0); } 50% { box-shadow: 0 0 100px 50px rgba(168, 85, 247, 0.9); } 100% { box-shadow: 0 0 0px rgba(168, 85, 247, 0); } }
+        .animate-attack-player { animation: attack-lunge-player 0.5s ease-in-out; }
+        .animate-attack-opponent { animation: attack-lunge-opponent 0.5s ease-in-out; }
+        .animate-hit-recoil { animation: hit-recoil 0.4s ease-out; }
+        .animate-transform { animation: transform-flash 1s ease-out; }
+
+        .beam { position: absolute; height: 10px; background: linear-gradient(90deg, transparent, var(--power-color)); border-radius: 5px; box-shadow: 0 0 15px var(--power-color); transform-origin: left center; animation: fire-beam 0.5s ease-out forwards; }
+        @keyframes fire-beam { from { width: 0; } to { width: 100%; } }
+        
+        .intro-modal, .clash-modal, #how-to-play-modal { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; z-index: 100; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); pointer-events: all; 
+        }
+        .intro-content, .clash-content, .how-to-play-content { background-color: #161b22; padding: 2rem; border-radius: 12px; border: 2px solid #58a6ff; max-width: 500px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="vfx-layer" id="vfx-layer"></div>
+<div class="intro-modal" id="intro-modal"> <div class="intro-content"> <h2 class="text-2xl font-bold mb-4">戰前喊話</h2> <p id="intro-text" class="text-lg italic">正在生成對話...</p> </div> </div>
+<div class="clash-modal" id="clash-modal"> <div class="clash-content"> <h2>對決！</h2> <p>瘋狂連點！</p> <button id="clash-mash-btn">連點！</button> <p class="mt-4 text-xl" id="clash-timer">3.0</p> </div> </div>
+<div id="how-to-play-modal"> <div class="how-to-play-content"> <h2 class="text-2xl font-bold mb-6">遊戲玩法說明</h2> <div class="text-left space-y-4"> <p><strong class="text-blue-400">🎯 目標：</strong>將對手團隊的 3 名成員全部擊敗！</p> <p><strong class="text-purple-400">🔄 交換：</strong>在你的回合，可以消耗一次行動機會交換後備隊員上場。</p> <p><strong class="text-yellow-400">⚡️ 集氣/攻擊：</strong>與之前相同，集氣來發動更強的攻擊和必殺技。</p> <p><strong class="text-green-400">🛡️ 格檔：</strong>消耗耐力來大幅減傷。</p> <p><strong class="text-orange-400">💥↔️💥 氣功波對決：</strong>緊張刺激的連點小遊戲！</p> </div> <button id="close-how-to-play-btn" class="control-button mt-8 w-full">我明白了</button> </div> </div>
+
+<div class="game-container">
+    <div id="start-screen">
+        <h1>力之大會 - 團隊戰</h1>
+        <p class="text-lg mb-8">選擇你的三位戰士，為宇宙存亡而戰！</p>
+        <div class="character-selection grid grid-cols-2 md:grid-cols-3 justify-around gap-4">
+            <div class="character-card" data-character="悟空"> <div class="character-image-container"><img src="https://i.imgur.com/uC5MNs7.png" class="character-image"></div> <div><h3>孫悟空</h3><p class="text-sm text-gray-400">潛力無限</p></div> </div>
+            <div class="character-card" data-character="貝吉塔"> <div class="character-image-container"><img src="https://i.imgur.com/FPMvnb1.png" class="character-image"></div> <div><h3>貝吉塔</h3><p class="text-sm text-gray-400">驕傲的王子</p></div> </div>
+            <div class="character-card" data-character="吉連"> <div class="character-image-container"><img src="https://i.imgur.com/5O4oKjV.png" class="character-image"></div> <div><h3>吉連</h3><p class="text-sm text-gray-400">灰色力量</p></div> </div>
+            <div class="character-card" data-character="弗利沙"> <div class="character-image-container"><img src="https://i.imgur.com/L7E1kI1.png" class="character-image"></div> <div><h3>弗利沙</h3><p class="text-sm text-gray-400">宇宙帝王</p></div> </div>
+            <div class="character-card" data-character="托破"> <div class="character-image-container"><img src="https://i.imgur.com/G5Yy1s0.png" class="character-image"></div> <div><h3>托破</h3><p class="text-sm text-gray-400">正義的戰士</p></div> </div>
+            <div class="character-card" data-character="自在極意悟空"> <div class="character-image-container"><img src="https://i.imgur.com/k2j4XoN.png" class="character-image"></div> <div><h3>孫悟空 (兆)</h3><p class="text-sm text-gray-400">神之境界</p></div> </div>
+        </div>
+        <div class="mt-8 flex flex-col md:flex-row gap-4 justify-center">
+            <button id="start-game-btn" class="control-button w-full md:w-auto flex-grow" disabled>組成隊伍 (0/3)</button>
+            <button id="how-to-play-btn" class="control-button w-full md:w-auto">遊戲玩法</button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="game-area">
+        <div id="battlefield">
+            <div class="team-bench player" id="player-bench"></div>
+            <div id="player-battle-container" class="character-battle-container">
+                <div class="fighter-stats">
+                    <h2 id="player-name" class="name text-lg font-bold">你的戰士</h2>
+                    <div class="stat-bar" id="player-health-bar"><div class="stat-fill"></div></div>
+                    <div class="stat-bar" id="player-stamina-bar"><div class="stat-fill"></div></div>
+                </div>
+                <div id="player-sprite" class="character-sprite">
+                    <img id="player-image" src="">
+                </div>
+            </div>
+            <div id="opponent-battle-container" class="character-battle-container">
+                <div class="fighter-stats">
+                    <h2 id="opponent-name" class="name text-lg font-bold">對手</h2>
+                    <div class="stat-bar" id="opponent-health-bar"><div class="stat-fill"></div></div>
+                </div>
+                <div id="opponent-sprite" class="character-sprite">
+                    <img id="opponent-image" src="">
+                </div>
+            </div>
+            <div class="team-bench opponent" id="opponent-bench"></div>
+        </div>
+        <div class="power-display my-2"> <h3 class="text-lg">能量</h3> <div class="power-bar"><div class="power-fill" id="player-power-fill"></div></div> </div>
+        <div class="game-buttons grid grid-cols-2 md:grid-cols-5 gap-4">
+            <button id="charge-btn" class="control-button">集氣</button>
+            <button id="attack-btn" class="control-button" disabled>攻擊</button>
+            <button id="special-attack-btn" class="control-button" disabled>必殺技</button>
+            <button id="guard-btn" class="control-button">格檔</button>
+            <button id="switch-btn" class="control-button">交換</button>
+            <button id="transform-btn" class="control-button col-span-2 md:col-span-2" style="display: none;">變身</button>
+            <button id="commentary-btn" class="control-button col-span-2 md:col-span-3" disabled>✨ 戰況解說 ✨</button>
+        </div>
+        <div class="message-box mt-4" id="message-log">歡迎來到力之大會！</div>
+        <button id="restart-btn" class="control-button mt-4" style="display: none;">再戰一場</button>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const UIElements = {
+        playerBench: document.getElementById('player-bench'),
+        opponentBench: document.getElementById('opponent-bench'),
+        switchBtn: document.getElementById('switch-btn'),
+        vfxLayer: document.getElementById('vfx-layer'), startScreen: document.getElementById('start-screen'), gameScreen: document.getElementById('game-screen'),
+        characterCards: document.querySelectorAll('.character-card'), startGameBtn: document.getElementById('start-game-btn'),
+        chargeBtn: document.getElementById('charge-btn'), attackBtn: document.getElementById('attack-btn'), specialAttackBtn: document.getElementById('special-attack-btn'),
+        commentaryBtn: document.getElementById('commentary-btn'), restartBtn: document.getElementById('restart-btn'), guardBtn: document.getElementById('guard-btn'),
+        transformBtn: document.getElementById('transform-btn'), introModal: document.getElementById('intro-modal'), introText: document.getElementById('intro-text'),
+        clashModal: document.getElementById('clash-modal'), clashMashBtn: document.getElementById('clash-mash-btn'), clashTimer: document.getElementById('clash-timer'),
+        howToPlayModal: document.getElementById('how-to-play-modal'), howToPlayBtn: document.getElementById('how-to-play-btn'), closeHowToPlayBtn: document.getElementById('close-how-to-play-btn'),
+        player: { 
+            name: document.getElementById('player-name'), healthFill: document.querySelector('#player-health-bar .stat-fill'), staminaFill: document.querySelector('#player-stamina-bar .stat-fill'), 
+            powerFill: document.getElementById('player-power-fill'), sprite: document.getElementById('player-sprite'), image: document.getElementById('player-image'), 
+        },
+        opponent: { 
+            name: document.getElementById('opponent-name'), healthFill: document.querySelector('#opponent-health-bar .stat-fill'), 
+            sprite: document.getElementById('opponent-sprite'), image: document.getElementById('opponent-image'), 
+        },
+        messageLog: document.getElementById('message-log'),
+    };
+    const characters = {
+        '悟空': { name: '孫悟空', img: 'https://i.imgur.com/uC5MNs7.png', maxHealth: 100, attack: 10, defense: 8, specialMove: '龜派氣功', transform: { name: '超級賽亞人藍', attack: 15, defense: 12, img: 'https://i.imgur.com/6X2PV3d.png' } },
+        '貝吉塔': { name: '貝吉塔', img: 'https://i.imgur.com/FPMvnb1.png', maxHealth: 95, attack: 11, defense: 7, specialMove: '終極閃光', transform: { name: '深藍進化', attack: 16, defense: 11, img: 'https://i.imgur.com/3Q9E9fG.png' } },
+        '吉連': { name: '吉連', img: 'https://i.imgur.com/5O4oKjV.png', maxHealth: 120, attack: 9, defense: 10, specialMove: '威力衝擊', transform: { name: '爆發潛能', attack: 13, defense: 15, img: 'https://i.imgur.com/5O4oKjV.png' } },
+        '弗利沙': { name: '弗利沙', img: 'https://i.imgur.com/L7E1kI1.png', maxHealth: 90, attack: 12, defense: 6, specialMove: '死亡光束', transform: { name: '黃金弗利沙', attack: 18, defense: 8, img: 'https://i.imgur.com/xO4b6L7.png' } },
+        '托破': { name: '托破', img: 'https://i.imgur.com/G5Yy1s0.png', maxHealth: 110, attack: 10, defense: 9, specialMove: '正義閃光', transform: { name: '破壞神模式', attack: 14, defense: 16, img: 'https://i.imgur.com/R3pL2Gz.png' } },
+        '自在極意悟空': { name: '孫悟空 (兆)', img: 'https://i.imgur.com/k2j4XoN.png', maxHealth: 150, attack: 14, defense: 14, specialMove: '神之龜派氣功', transform: { name: '孫悟空 (自在極意)', attack: 20, defense: 20, img: 'https://i.imgur.com/sOFa21P.png' } }
+    };
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const sounds = {
+        charge: createSound(0.1, 'sine', 200, 800, 0.5), attack: createSound(0.2, 'square', 440, 100, 0.2), special: createSound(1.0, 'sawtooth', 1000, 200, 1.0),
+        guard: createSound(0.15, 'triangle', 600, 400, 0.1), transform: createSound(2.0, 'sawtooth', 50, 1200, 2.0, true), hit: createSound(0.3, 'noise', 0, 0, 0.3),
+        clash: createSound(0.5, 'square', 200, 300, 0.7),
+    };
+    function createSound(duration, type, startFreq, endFreq, vol, isPowerUp = false){
+        return () => {
+            if(audioContext.state === 'suspended') audioContext.resume();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            gainNode.gain.setValueAtTime(vol, audioContext.currentTime);
+            oscillator.type = type === 'noise' ? 'triangle' : type;
+            if (type === 'noise') {
+                const bufferSize = audioContext.sampleRate * duration;
+                const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                const noiseNode = audioContext.createBufferSource();
+                noiseNode.buffer = buffer;
+                noiseNode.connect(gainNode);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+                noiseNode.start();
+            } else {
+                oscillator.frequency.setValueAtTime(startFreq, audioContext.currentTime);
+                if (isPowerUp) {
+                    oscillator.frequency.exponentialRampToValueAtTime(endFreq, audioContext.currentTime + duration * 0.8);
+                } else {
+                    oscillator.frequency.exponentialRampToValueAtTime(endFreq, audioContext.currentTime + duration);
+                }
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + duration);
+            }
+        }
+    }
+    
+    let playerTeam = [], opponentTeam = [];
+    let playerActiveIndex = 0, opponentActiveIndex = 0;
+    let selectedCharacters = [];
+    
+    let playerPower = 0, playerStamina = 100;
+    let isCharging = false, chargingInterval = null, isGameOver = false, isPlayerTurn = true, isGuarding = false, lastAction = "";
+    
+    const API_KEY = 'YOUR_API_KEY';
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    async function callGemini(prompt, system) { 
+        if (!API_KEY || API_KEY === 'YOUR_API_KEY') return "尚未設定 API 金鑰。";
+        try {
+            const payload = { contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: system }] } };
+            const response = await fetch(geminiApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const result = await response.json(); 
+            return result?.candidates?.[0]?.content?.parts?.[0]?.text || "解說員的麥克風故障了！";
+        } catch (error) { 
+            console.error("Gemini API error:", error); 
+            return "解說員的麥克風故障了！"; 
+        } 
+    }
+    async function generateCommentary() { /* logic remains the same */ }
+    async function generateIntro() {
+        UIElements.introModal.style.display = 'flex';
+        logMessage("戰士正在對峙...");
+        const system = "你是一位七龍珠故事的編劇。請為接下來的兩位戰士，寫一段簡短、符合他們性格、充滿張力的戰前對話。直接開始對話，不要有任何旁白或開場白。";
+        const prompt = `${playerTeam[playerActiveIndex].name} vs ${opponentTeam[opponentActiveIndex].name}`;
+        const intro = await callGemini(prompt, system);
+        UIElements.introText.innerText = intro.replace(/\n/g, '\n\n');
+        setTimeout(() => { 
+            UIElements.introModal.style.display = 'none'; 
+            startPlayerTurn();
+        }, 5000);
+    }
+
+    function init() {
+        UIElements.characterCards.forEach(card => card.addEventListener('click', selectCharacterForTeam)); 
+        UIElements.startGameBtn.addEventListener('click', startGame);
+        UIElements.switchBtn.addEventListener('click', switchPlayerCharacter);
+        UIElements.chargeBtn.addEventListener('click', toggleCharge); 
+        UIElements.attackBtn.addEventListener('click', () => playerAction('attack'));
+        UIElements.specialAttackBtn.addEventListener('click', () => playerAction('special')); 
+        UIElements.guardBtn.addEventListener('click', () => playerAction('guard'));
+        UIElements.transformBtn.addEventListener('click', () => playerAction('transform')); 
+        UIElements.commentaryBtn.addEventListener('click', generateCommentary);
+        UIElements.restartBtn.addEventListener('click', () => location.reload()); 
+        setInterval(() => { if (playerStamina < 100) { playerStamina = Math.min(100, playerStamina + 2); updateUI(); } }, 1000);
+        UIElements.howToPlayBtn.addEventListener('click', () => { UIElements.howToPlayModal.style.display = 'flex'; });
+        UIElements.closeHowToPlayBtn.addEventListener('click', () => { UIElements.howToPlayModal.style.display = 'none'; });
+    }
+    
+    function selectCharacterForTeam(event) {
+        const card = event.currentTarget;
+        if (selectedCharacters.length >= 3 && !card.classList.contains('selected')) return;
+
+        const characterKey = card.dataset.character;
+
+        if (!selectedCharacters.includes(characterKey)) {
+            selectedCharacters.push(characterKey);
+            card.classList.add('selected');
+        } else {
+            selectedCharacters = selectedCharacters.filter(c => c !== characterKey);
+            card.classList.remove('selected');
+        }
+        
+        UIElements.startGameBtn.textContent = `組成隊伍 (${selectedCharacters.length}/3)`;
+        UIElements.startGameBtn.disabled = selectedCharacters.length !== 3;
+    }
+
+    async function startGame() {
+        playerTeam = selectedCharacters.map(key => ({ ...characters[key], health: characters[key].maxHealth, isTransformed: false, characterKey: key }));
+        
+        const opponentKeys = Object.keys(characters).filter(key => !selectedCharacters.includes(key));
+        opponentTeam = [];
+        for (let i = 0; i < 3; i++) {
+            const randomIndex = Math.floor(Math.random() * opponentKeys.length);
+            const key = opponentKeys.splice(randomIndex, 1)[0];
+            opponentTeam.push({ ...characters[key], health: characters[key].maxHealth, isTransformed: false, characterKey: key });
+        }
+
+        UIElements.startScreen.style.display = 'none'; UIElements.gameScreen.classList.add('active');
+        updateUI();
+        lastAction = `戰鬥剛剛開始！`; UIElements.commentaryBtn.disabled = false;
+        setPlayerButtons(false); 
+        await generateIntro();
+    }
+    
+    function switchPlayerCharacter() {
+        if (!isPlayerTurn || isGameOver) return;
+        const availableSwitches = playerTeam.map((p, i) => ({...p, index: i})).filter((p, i) => i !== playerActiveIndex && p.health > 0);
+        if (availableSwitches.length > 0) {
+            let nextIndex = (playerActiveIndex + 1) % playerTeam.length;
+            while(playerTeam[nextIndex].health <= 0) {
+                nextIndex = (nextIndex + 1) % playerTeam.length;
+            }
+            playerActiveIndex = nextIndex;
+            logMessage(`你換上了 ${playerTeam[playerActiveIndex].name}！`);
+            updateUI();
+            endPlayerTurn();
+        } else {
+            logMessage("沒有可以交換的隊員了！");
+        }
+    }
+    
+    function toggleCharge(){
+        if(isGameOver || !isPlayerTurn) return;
+        isCharging = !isCharging;
+        if(isCharging){
+            sounds.charge();
+            UIElements.chargeBtn.textContent="停止集氣";
+            const aura = document.createElement('div');
+            aura.className = 'charging-aura';
+            UIElements.player.sprite.appendChild(aura);
+            setPlayerButtons(false);
+            chargingInterval=setInterval(()=>{
+                playerPower=Math.min(100,playerPower+5*Math.random());
+                UIElements.player.powerFill.style.width=`${playerPower}%`;
+                if(playerPower === 100) toggleCharge();
+            }, 50);
+        } else {
+            clearInterval(chargingInterval);
+            UIElements.chargeBtn.textContent="集氣";
+            const aura = UIElements.player.sprite.querySelector('.charging-aura');
+            if (aura) aura.remove();
+            logMessage(`你集了 ${Math.round(playerPower)}% 的能量。`);
+            setPlayerButtons(true);
+        }
+    }
+
+    function playerAction(type){
+        if(!isGameOver || !isPlayerTurn) {
+            const activePlayer = playerTeam[playerActiveIndex];
+            const activeOpponent = opponentTeam[opponentActiveIndex];
+            let endsTurn = true;
+
+            switch(type){
+                case "attack":
+                    if(playerPower < 10){ logMessage("能量不足！"); return; }
+                    triggerCharacterAnimation(UIElements.player.sprite, 'attack-player');
+                    setTimeout(() => {
+                        dealDamage(opponentTeam, opponentActiveIndex, calculateDamage(activePlayer, activeOpponent, playerPower), activePlayer.name);
+                        lastAction = `${activePlayer.name} 發動猛攻！`;
+                    }, 250);
+                    break;
+                case "special":
+                    sounds.special();
+                    triggerCharacterAnimation(UIElements.player.sprite, 'attack-player');
+                     setTimeout(() => {
+                        createBeam(true);
+                        dealDamage(opponentTeam, opponentActiveIndex, calculateDamage(activePlayer, activeOpponent, 250), activePlayer.name, activePlayer.specialMove);
+                        lastAction = `${activePlayer.name} 使出必殺技「${activePlayer.specialMove}」！`;
+                    }, 250);
+                    break;
+                case "guard":
+                    if(playerStamina < 30){ logMessage("耐力不足無法格檔！"); return; }
+                    isGuarding = true;
+                    playerStamina -= 30;
+                    sounds.guard();
+                    logMessage(`${activePlayer.name} 擺出了防禦架式！`);
+                    lastAction = `${activePlayer.name} 採取了防禦姿態！`;
+                    updateUI(); 
+                    endsTurn = false;
+                    break;
+                case "transform":
+                    if(activePlayer.isTransformed) return;
+                    activePlayer.isTransformed = true;
+                    activePlayer.attack = activePlayer.transform.attack;
+                    activePlayer.defense = activePlayer.transform.defense;
+                    activePlayer.name = activePlayer.transform.name;
+                    activePlayer.img = activePlayer.transform.img;
+                    sounds.transform();
+                    triggerCharacterAnimation(UIElements.player.sprite, 'transform');
+                    logMessage(`什...什麼？！${activePlayer.name} 爆發出驚人的氣！`);
+                    lastAction = `${activePlayer.name} 變身了，戰況進入白熱化！`;
+                    updateUI();
+                    endsTurn = false;
+                    break;
+            }
+            if (type === 'attack' || type === 'special') {
+                playerPower = 0;
+                UIElements.player.powerFill.style.width = "0%";
+            }
+            if(endsTurn && !isGameOver) {
+                endPlayerTurn();
+            }
+        }
+    }
+
+    function opponentTurn() {
+        logMessage(`${opponentTeam[opponentActiveIndex].name} 的回合...`);
+        setTimeout(() => {
+            let activeOpponent = opponentTeam[opponentActiveIndex];
+            let activePlayer = playerTeam[playerActiveIndex];
+
+            if (activeOpponent.health / activeOpponent.maxHealth < 0.3) {
+                const healthyTeammates = opponentTeam.filter((p, i) => i !== opponentActiveIndex && p.health > 0);
+                if (healthyTeammates.length > 0) {
+                     let nextIndex = (opponentActiveIndex + 1) % opponentTeam.length;
+                    while(opponentTeam[nextIndex].health <= 0) {
+                        nextIndex = (nextIndex + 1) % opponentTeam.length;
+                    }
+                    opponentActiveIndex = nextIndex;
+                    logMessage(`對手換上了 ${opponentTeam[opponentActiveIndex].name}！`);
+                    updateUI();
+                    if (!isGameOver) startPlayerTurn();
+                    return;
+                }
+            }
+            
+            triggerCharacterAnimation(UIElements.opponent.sprite, 'attack-opponent');
+            setTimeout(() => {
+                const power = activeOpponent.isCharged ? 150 : 70 + Math.random() * 30;
+                const damage = calculateDamage(activeOpponent, activePlayer, power);
+                dealDamage(playerTeam, playerActiveIndex, damage, activeOpponent.name);
+                lastAction = `${activeOpponent.name} 展開了凌厲的反擊！`; 
+                activeOpponent.isCharged = false;
+                if (!isGameOver) startPlayerTurn();
+            }, 250);
+        }, 2000);
+    }
+    
+    function dealDamage(targetTeam, targetIndex, damage, attackerName, moveName = null) {
+        let target = targetTeam[targetIndex];
+        target.health = Math.max(0, target.health - damage);
+        
+        logMessage(moveName ? `${attackerName} 使用「${moveName}」造成 ${damage} 點傷害！` : `${attackerName} 造成了 ${damage} 點傷害！`);
+        sounds.hit();
+        const targetSprite = targetTeam === playerTeam ? UIElements.player.sprite : UIElements.opponent.sprite;
+        triggerCharacterAnimation(targetSprite, "hit-recoil");
+
+        if (target.health <= 0) {
+            logMessage(`${target.name} 被擊倒了！`);
+            setTimeout(checkGameState, 1000); 
+        } else {
+            updateUI();
+        }
+    }
+
+    function checkGameState() {
+        const playerTeamDefeated = playerTeam.every(p => p.health <= 0);
+        const opponentTeamDefeated = opponentTeam.every(p => p.health <= 0);
+
+        if (playerTeamDefeated) {
+            isGameOver = true;
+            logMessage(`你的隊伍全滅了...挑戰失敗。`);
+            endGame();
+        } else if (opponentTeamDefeated) {
+            isGameOver = true;
+            logMessage(`太棒了！你擊敗了對手整個隊伍！`);
+            endGame();
+        } else {
+            if (playerTeam[playerActiveIndex].health <= 0) {
+                let nextIndex = (playerActiveIndex + 1) % playerTeam.length;
+                while(playerTeam[nextIndex].health <= 0) { nextIndex = (nextIndex + 1) % playerTeam.length; }
+                playerActiveIndex = nextIndex;
+                logMessage(`自動換上 ${playerTeam[playerActiveIndex].name}！`);
+            }
+             if (opponentTeam[opponentActiveIndex].health <= 0) {
+                let nextIndex = (opponentActiveIndex + 1) % opponentTeam.length;
+                while(opponentTeam[nextIndex].health <= 0) { nextIndex = (nextIndex + 1) % opponentTeam.length; }
+                opponentActiveIndex = nextIndex;
+                logMessage(`對手換上 ${opponentTeam[opponentActiveIndex].name}！`);
+            }
+            updateUI();
+        }
+    }
+    
+    function updateUI() {
+        if (!playerTeam.length || !opponentTeam.length) return;
+
+        const activePlayer = playerTeam[playerActiveIndex];
+        const activeOpponent = opponentTeam[opponentActiveIndex];
+
+        UIElements.player.name.textContent = activePlayer.name; 
+        UIElements.player.image.src = activePlayer.img;
+        UIElements.player.name.classList.toggle('transformed', activePlayer.isTransformed);
+        UIElements.player.healthFill.style.width = `${Math.max(0, (activePlayer.health / activePlayer.maxHealth) * 100)}%`;
+        UIElements.player.staminaFill.style.width = `${playerStamina}%`;
+        UIElements.transformBtn.style.display = (activePlayer.health / activePlayer.maxHealth <= 0.5 && !activePlayer.isTransformed && activePlayer.transform) ? 'block' : 'none';
+        
+        UIElements.opponent.name.textContent = activeOpponent.name; 
+        UIElements.opponent.image.src = activeOpponent.img;
+        UIElements.opponent.name.classList.toggle('transformed', activeOpponent.isTransformed);
+        UIElements.opponent.healthFill.style.width = `${Math.max(0, (activeOpponent.health / activeOpponent.maxHealth) * 100)}%`;
+        
+        UIElements.playerBench.innerHTML = playerTeam.filter((p, i) => i !== playerActiveIndex).map(p => `
+            <div class="bench-char ${p.health <= 0 ? 'opacity-50' : ''}">
+                <img src="${p.img}" alt="${p.name}">
+                <div class="bench-char-health"><div class="bench-char-health-fill" style="width: ${Math.max(0, p.health/p.maxHealth*100)}%;"></div></div>
+            </div>`).join('');
+            
+        UIElements.opponentBench.innerHTML = opponentTeam.filter((p, i) => i !== opponentActiveIndex).map(p => `
+            <div class="bench-char ${p.health <= 0 ? 'opacity-50' : ''}">
+                <img src="${p.img}" alt="${p.name}">
+                <div class="bench-char-health"><div class="bench-char-health-fill" style="width: ${Math.max(0, p.health/p.maxHealth*100)}%; background: var(--opponent-color);"></div></div>
+            </div>`).join('');
+    }
+
+    function calculateDamage(attacker, defender, power) { let finalDamage = Math.floor((power / 10 + 5) * (attacker.attack / defender.defense) * (Math.random() * 0.4 + 0.8)); if (defender === playerTeam[playerActiveIndex] && isGuarding) finalDamage = Math.floor(finalDamage * 0.2); return Math.max(1, finalDamage); }
+    function startPlayerTurn() { isPlayerTurn = true; isGuarding = false; logMessage("你的回合！"); setPlayerButtons(true); }
+    function endPlayerTurn() { isPlayerTurn = false; setPlayerButtons(false); setTimeout(opponentTurn, 1000); }
+    function endGame() { setPlayerButtons(false); UIElements.commentaryBtn.disabled = true; ["chargeBtn", "attackBtn", "specialAttackBtn", "commentaryBtn", "guardBtn", "transformBtn", "switchBtn"].forEach(btnId => UIElements[btnId].style.display = "none"); UIElements.restartBtn.style.display = "block"; }
+    function setPlayerButtons(enabled) { UIElements.chargeBtn.disabled = !enabled || isGameOver || isCharging; UIElements.attackBtn.disabled = !enabled || isGameOver || isCharging || playerPower < 10; UIElements.specialAttackBtn.disabled = !enabled || isGameOver || isCharging || playerPower < 100; UIElements.guardBtn.disabled = !enabled || isGameOver || isCharging || playerStamina < 30; UIElements.transformBtn.disabled = !enabled || isGameOver || isCharging; UIElements.switchBtn.disabled = !enabled || isGameOver || isCharging || playerTeam.filter(p => p.health > 0).length <= 1; }
+    function logMessage(message) { UIElements.messageLog.textContent = message; }
+    function triggerCharacterAnimation(element, animationClass) { element.classList.remove('animate-attack-player', 'animate-attack-opponent', 'animate-hit-recoil', 'animate-transform'); setTimeout(() => { element.classList.add(`animate-${animationClass}`); element.addEventListener("animationend", () => element.classList.remove(`animate-${animationClass}`), { once: true }); }, 10); }
+    function createBeam(isPlayer) { const beam = document.createElement("div"); beam.className = "beam"; const battlefieldRect = document.getElementById('battlefield').getBoundingClientRect(); const startSprite = isPlayer ? UIElements.player.sprite : UIElements.opponent.sprite; const startRect = startSprite.getBoundingClientRect(); beam.style.top = `${startRect.top - battlefieldRect.top + startRect.height / 2}px`; if (isPlayer) { beam.style.left = `${startRect.right - battlefieldRect.left}px`; } else { beam.style.right = `${battlefieldRect.right - startRect.left}px`; beam.style.transform = 'scaleX(-1)'; } UIElements.vfxLayer.appendChild(beam); setTimeout(() => beam.remove(), 500); }
+    
+    init();
+});
+</script>
+</body>
+</html>
+
